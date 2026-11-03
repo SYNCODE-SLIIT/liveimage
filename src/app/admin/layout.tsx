@@ -17,7 +17,9 @@ import {
   ExternalLink,
   ShieldCheck,
   UserCheck,
+  LogOut,
 } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 import { useLiveImage } from "@/context/LiveImageContext";
 import { LiveImageLogo } from "@/components/LiveImageLogo";
 
@@ -27,9 +29,20 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { bookings, userRole, setUserRole } = useLiveImage();
+  const { bookings, userRole } = useLiveImage();
+  const { data: session } = useSession();
 
   const newBookingsCount = bookings.filter((b) => b.status === "New").length;
+  const isOwner = userRole === "owner";
+  // Must match STAFF_PATHS in src/middleware.ts
+  const staffCanOpen = (href: string) =>
+    isOwner || ["/admin/upload", "/admin/media"].includes(href.split("?")[0]);
+  const displayName = session?.user?.name || session?.user?.email || "";
+  const handleSignOut = () => signOut({ callbackUrl: "/admin/login" });
+
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
 
   const mainNav = [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -106,7 +119,7 @@ export default function AdminLayout({
               Main
             </div>
             <nav className="space-y-1">
-              {mainNav.map((item) => {
+              {mainNav.filter((item) => staffCanOpen(item.href)).map((item) => {
                 const Icon = item.icon;
                 const active =
                   item.label === "Portfolio Projects"
@@ -135,12 +148,13 @@ export default function AdminLayout({
           </div>
 
           {/* CONTENT */}
+          {isOwner && (
           <div>
             <div className="px-3 mb-2 text-[10px] font-heading font-bold uppercase tracking-widest text-muted/60">
               Content
             </div>
             <nav className="space-y-1">
-              {contentNav.map((item) => {
+              {contentNav.filter((item) => staffCanOpen(item.href)).map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
@@ -156,13 +170,16 @@ export default function AdminLayout({
             </nav>
           </div>
 
+          )}
+
           {/* CLIENTS */}
+          {isOwner && (
           <div>
             <div className="px-3 mb-2 text-[10px] font-heading font-bold uppercase tracking-widest text-muted/60">
               Clients
             </div>
             <nav className="space-y-1">
-              {clientNav.map((item) => {
+              {clientNav.filter((item) => staffCanOpen(item.href)).map((item) => {
                 const Icon = item.icon;
                 const active = isActiveLink(item.href);
                 return (
@@ -194,13 +211,16 @@ export default function AdminLayout({
             </nav>
           </div>
 
+          )}
+
           {/* SETTINGS */}
+          {isOwner && (
           <div>
             <div className="px-3 mb-2 text-[10px] font-heading font-bold uppercase tracking-widest text-muted/60">
               Settings
             </div>
             <nav className="space-y-1">
-              {settingsNav.map((item) => {
+              {settingsNav.filter((item) => staffCanOpen(item.href)).map((item) => {
                 const Icon = item.icon;
                 const active = isActiveLink("/admin/settings");
                 return (
@@ -224,55 +244,37 @@ export default function AdminLayout({
               })}
             </nav>
           </div>
+          )}
         </div>
 
-        {/* Bottom Profile & Role Switcher (Damith Owner vs Staff Upload-Only) */}
+        {/* Bottom Profile & Sign Out */}
         <div className="p-4 border-t border-white/10 bg-[#121217] space-y-3">
           <div className="flex items-center gap-3">
             <div
               className={`w-9 h-9 rounded-full flex items-center justify-center font-heading font-bold text-sm text-white shrink-0 ${
-                userRole === "owner" ? "bg-rec" : "bg-amber-600"
+                isOwner ? "bg-rec" : "bg-amber-600"
               }`}
             >
-              {userRole === "owner" ? "D" : "S"}
+              {(displayName[0] || "?").toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
               <div className="font-heading font-bold text-xs text-paper truncate">
-                {userRole === "owner" ? "Damith Sadaruwan" : "Event Crew Staff"}
+                {displayName}
               </div>
               <div className="text-[11px] text-muted truncate">
-                {userRole === "owner"
-                  ? "Owner · Full Access"
-                  : "Staff · Upload-Only"}
+                {isOwner ? "Owner · Full Access" : "Staff · Upload-Only"}
               </div>
             </div>
           </div>
 
-          {/* Role Simulation Switcher */}
-          <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-night border border-white/10 text-[10px] font-medium">
-            <button
-              type="button"
-              onClick={() => setUserRole("owner")}
-              className={`py-1.5 rounded-md transition ${
-                userRole === "owner"
-                  ? "bg-rec text-white font-bold"
-                  : "text-muted hover:text-paper"
-              }`}
-            >
-              Damith (Owner)
-            </button>
-            <button
-              type="button"
-              onClick={() => setUserRole("staff")}
-              className={`py-1.5 rounded-md transition ${
-                userRole === "staff"
-                  ? "bg-amber-500 text-night font-bold"
-                  : "text-muted hover:text-paper"
-              }`}
-            >
-              Staff (Upload)
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full py-2 rounded-lg bg-night border border-white/10 text-[11px] font-medium text-muted hover:text-paper flex items-center justify-center gap-1.5 transition"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign out</span>
+          </button>
         </div>
       </aside>
 
@@ -284,12 +286,11 @@ export default function AdminLayout({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() =>
-              setUserRole(userRole === "owner" ? "staff" : "owner")
-            }
-            className="px-2.5 py-1 rounded-full bg-stage border border-white/15 text-[11px] font-medium text-paper"
+            onClick={handleSignOut}
+            className="px-2.5 py-1 rounded-full bg-stage border border-white/15 text-[11px] font-medium text-paper flex items-center gap-1"
           >
-            {userRole === "owner" ? "Damith (Owner)" : "Staff (Upload)"}
+            <LogOut className="w-3 h-3" />
+            <span>Sign out</span>
           </button>
           <Link
             href="/"
@@ -306,17 +307,10 @@ export default function AdminLayout({
         {userRole === "staff" && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-8 py-2.5 flex items-center justify-between text-xs text-amber-900">
             <span>
-              <strong>Staff Upload-Only Mode Active:</strong> You can upload
-              event photos &amp; videos. Pricing, deletion &amp; site settings are
-              restricted to Damith (Owner).
+              <strong>Staff Upload-Only Access:</strong> You can upload and
+              browse event photos &amp; videos. Bookings, pricing, deletion &amp;
+              site settings are restricted to the owner.
             </span>
-            <button
-              type="button"
-              onClick={() => setUserRole("owner")}
-              className="font-bold underline ml-4 shrink-0"
-            >
-              Switch to Damith (Owner)
-            </button>
           </div>
         )}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -334,7 +328,8 @@ export default function AdminLayout({
       </Link>
 
       {/* MOBILE BOTTOM-NAV ADMIN BAR (Page 13) */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 px-2 py-2 grid grid-cols-5 text-[11px] font-medium text-gray-500">
+      <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 px-2 py-2 grid ${isOwner ? "grid-cols-5" : "grid-cols-2"} text-[11px] font-medium text-gray-500`}>
+        {isOwner && (
         <Link
           href="/admin"
           className={`flex flex-col items-center gap-1 py-1 ${
@@ -344,6 +339,7 @@ export default function AdminLayout({
           <LayoutDashboard className="w-4 h-4" />
           <span>Home</span>
         </Link>
+        )}
         <Link
           href="/admin/media"
           className={`flex flex-col items-center gap-1 py-1 ${
@@ -353,6 +349,7 @@ export default function AdminLayout({
           <ImageIcon className="w-4 h-4" />
           <span>Media</span>
         </Link>
+        {isOwner && (
         <Link
           href="/admin/bookings"
           className={`flex flex-col items-center gap-1 py-1 relative ${
@@ -367,6 +364,8 @@ export default function AdminLayout({
             </span>
           )}
         </Link>
+        )}
+        {isOwner && (
         <Link
           href="/admin/settings"
           className={`flex flex-col items-center gap-1 py-1 ${
@@ -376,6 +375,7 @@ export default function AdminLayout({
           <Settings className="w-4 h-4" />
           <span>Content</span>
         </Link>
+        )}
         <Link
           href="/admin/upload"
           className={`flex flex-col items-center gap-1 py-1 ${

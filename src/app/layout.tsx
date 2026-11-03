@@ -3,6 +3,7 @@ import { Poppins, Inter } from "next/font/google";
 import "./globals.css";
 import { LiveImageProvider } from "@/context/LiveImageContext";
 import { ClientShell } from "@/components/ClientShell";
+import { AuthSessionProvider } from "@/components/AuthSessionProvider";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -40,9 +41,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
       <body className="antialiased selection:bg-rec selection:text-white">
-        <LiveImageProvider>
-          <ClientShell>{children}</ClientShell>
-        </LiveImageProvider>
+        <AuthSessionProvider>
+          <LiveImageProvider>
+            <ClientShell>{children}</ClientShell>
+          </LiveImageProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

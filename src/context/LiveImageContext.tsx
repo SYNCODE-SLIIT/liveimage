@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   BookingRequest,
   BookingStatus,
@@ -41,7 +42,6 @@ interface LiveImageContextType {
   addTestimonial: (testimonial: Omit<Testimonial, "id">) => void;
   deleteTestimonial: (id: string) => void;
   userRole: UserRole;
-  setUserRole: (role: UserRole) => void;
   resetDemoData: () => void;
   isHydrated: boolean;
 }
@@ -56,7 +56,6 @@ const STORAGE_KEYS = {
   BOOKINGS: "liveimage_bookings_v1",
   PACKAGES: "liveimage_packages_v1",
   TESTIMONIALS: "liveimage_testimonials_v1",
-  ROLE: "liveimage_role_v1",
 };
 
 export function LiveImageProvider({ children }: { children: React.ReactNode }) {
@@ -69,7 +68,9 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
   const [testimonials, setTestimonials] = useState<Testimonial[]>(
     INITIAL_TESTIMONIALS
   );
-  const [userRole, setUserRoleState] = useState<UserRole>("owner");
+  const { data: session } = useSession();
+  // Role comes from the signed-in account; no session means least access
+  const userRole: UserRole = session?.user?.role ?? "staff";
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -88,11 +89,6 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
 
       const savedTestimonials = localStorage.getItem(STORAGE_KEYS.TESTIMONIALS);
       if (savedTestimonials) setTestimonials(JSON.parse(savedTestimonials));
-
-      const savedRole = localStorage.getItem(STORAGE_KEYS.ROLE) as UserRole | null;
-      if (savedRole === "owner" || savedRole === "staff") {
-        setUserRoleState(savedRole);
-      }
     } catch (e) {
       console.error("Failed to load state from localStorage", e);
     } finally {
@@ -250,20 +246,12 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const setUserRole = (role: UserRole) => {
-    setUserRoleState(role);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ROLE, role);
-    } catch {}
-  };
-
   const resetDemoData = () => {
     setSettings(INITIAL_SITE_SETTINGS);
     setProjects(INITIAL_MEDIA_PROJECTS);
     setBookings(INITIAL_BOOKINGS);
     setPackages(INITIAL_PACKAGES);
     setTestimonials(INITIAL_TESTIMONIALS);
-    setUserRoleState("owner");
     try {
       Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
     } catch {}
@@ -291,7 +279,6 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
         addTestimonial,
         deleteTestimonial,
         userRole,
-        setUserRole,
         resetDemoData,
         isHydrated,
       }}

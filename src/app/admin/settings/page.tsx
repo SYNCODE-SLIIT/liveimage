@@ -28,7 +28,6 @@ export default function AdminSettingsPage() {
     addTestimonial,
     deleteTestimonial,
     userRole,
-    setUserRole,
     resetDemoData,
   } = useLiveImage();
 
@@ -531,16 +530,15 @@ export default function AdminSettingsPage() {
               Users &amp; Staff Permissions
             </h2>
             <p className="text-xs text-gray-500">
-              Simulate switching between Damith (Owner) and a Staff login with
-              upload-only access
+              Each person signs in with their own account. New accounts are
+              added with <code>npm run user:create</code>.
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
-            onClick={() => setUserRole("owner")}
-            className={`cursor-pointer p-4 rounded-xl border-2 transition ${
+            className={`p-4 rounded-xl border-2 ${
               userRole === "owner"
                 ? "border-rec bg-rose-50/40"
                 : "border-gray-200 bg-gray-50"
@@ -556,8 +554,7 @@ export default function AdminSettingsPage() {
           </div>
 
           <div
-            onClick={() => setUserRole("staff")}
-            className={`cursor-pointer p-4 rounded-xl border-2 transition ${
+            className={`p-4 rounded-xl border-2 ${
               userRole === "staff"
                 ? "border-amber-500 bg-amber-50/40"
                 : "border-gray-200 bg-gray-50"

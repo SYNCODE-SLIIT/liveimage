@@ -10,7 +10,6 @@ import {
   Youtube,
   Instagram,
   Video,
-  Shield,
 } from "lucide-react";
 import { useLiveImage } from "@/context/LiveImageContext";
 import { LiveImageLogo } from "./LiveImageLogo";
@@ -159,15 +158,6 @@ export function Footer() {
               <li>
                 <Link href="/contact" className="hover:text-paper transition">
                   Contact &amp; Book
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/admin"
-                  className="inline-flex items-center gap-1.5 text-rec hover:underline font-medium"
-                >
-                  <Shield className="w-3.5 h-3.5" />
-                  Admin Dashboard
                 </Link>
               </li>
             </ul>
