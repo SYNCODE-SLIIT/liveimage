@@ -5,6 +5,7 @@ import { LiveImageProvider } from "@/context/LiveImageContext";
 import { ClientShell } from "@/components/ClientShell";
 import { AuthSessionProvider } from "@/components/AuthSessionProvider";
 import { getServerSession } from "next-auth";
+import { unstable_rethrow } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { getFallbackSiteData, getSiteData, SiteData } from "@/lib/siteData";
 import type { UserRole } from "@/data/seedData";
@@ -49,6 +50,8 @@ export default async function RootLayout({
     const session = await getServerSession(authOptions);
     role = session?.user.role ?? null;
   } catch (e) {
+    // Let Next.js's own control-flow errors (dynamic rendering) through
+    unstable_rethrow(e);
     console.error("Failed to read the login session", e);
   }
   let siteData: SiteData;
