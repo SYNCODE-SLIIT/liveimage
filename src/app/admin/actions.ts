@@ -1,10 +1,18 @@
 "use server";
 
 import { getServerSession } from "next-auth";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  createSignedUpload,
+  IMAGE_TYPES,
+  MAX_IMAGE_MB,
+  removeFiles,
+  storagePathsFromUrls,
+} from "@/lib/storage";
 import type { Testimonial, UserRole } from "@/data/seedData";
 
 export type ActionResult<T = undefined> =
@@ -191,7 +199,57 @@ export async function updateProjects(input: unknown, patch: unknown) {
 export async function deleteProjects(input: unknown) {
   return run(async () => {
     await requireRole(["owner"]);
-    await prisma.mediaProject.deleteMany({ where: { id: { in: ids.parse(input) } } });
+    const where = { id: { in: ids.parse(input) } };
+    const rows = await prisma.mediaProject.findMany({
+      where,
+      select: { thumbnailUrl: true, photos: true },
+    });
+    await prisma.mediaProject.deleteMany({ where });
+    // Clean up uploaded photos; the projects are already gone if this fails
+    const paths = storagePathsFromUrls(rows.flatMap((r) => [r.thumbnailUrl, ...r.photos]));
+    try {
+      await removeFiles(Array.from(new Set(paths)));
+    } catch (e) {
+      console.error("Could not remove project files from storage", e);
+    }
+  });
+}
+
+/* -------------------------------- Uploads ------------------------------ */
+
+const uploadRequestSchema = z
+  .array(
+    z.object({
+      type: z.enum(IMAGE_TYPES as [string, ...string[]], {
+        errorMap: () => ({ message: "Only JPG, PNG and WebP photos can be uploaded" }),
+      }),
+      size: z
+        .number()
+        .int()
+        .positive()
+        .max(MAX_IMAGE_MB * 1_000_000, `Photos must be under ${MAX_IMAGE_MB} MB each`),
+    })
+  )
+  .min(1)
+  .max(50, "Upload at most 50 photos at a time");
+
+const EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+// Gives the browser one-time URLs to upload photos straight to storage
+export async function createUploadUrls(input: unknown) {
+  return run(async () => {
+    await requireRole(["owner", "staff"]);
+    const files = uploadRequestSchema.parse(input);
+    const month = new Date().toISOString().slice(0, 7);
+    return Promise.all(
+      files.map((f) =>
+        createSignedUpload(`projects/${month}/${randomUUID()}.${EXTENSIONS[f.type]}`)
+      )
+    );
   });
 }
 

@@ -1,63 +1,32 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import Link from "next/link";
-import {
-  Upload,
-  CheckCircle2,
-  Link as LinkIcon,
-  FileVideo,
-  FileImage,
-  ExternalLink,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Upload, CheckCircle2, ExternalLink, Trash2 } from "lucide-react";
 import { useLiveImage } from "@/context/LiveImageContext";
 import { MediaCategory, PublishStatus } from "@/data/seedData";
+import { createUploadUrls } from "@/app/admin/actions";
+import {
+  prepareImage,
+  toEmbedUrl,
+  uploadWithProgress,
+} from "@/lib/imageProcessing";
 
 interface QueuedFile {
   id: string;
   name: string;
-  sizeLabel?: string;
   progress: number;
   type: "image" | "video";
   thumbnail: string;
+  status: "uploading" | "done" | "error";
+  error?: string;
+  // Public URL once a photo is stored
+  url?: string;
+  sizeMB?: number;
 }
 
-const INITIAL_QUEUE: QueuedFile[] = [
-  {
-    id: "q-1",
-    name: "sunset-live-kandy-01.jpg",
-    progress: 100,
-    type: "image",
-    thumbnail:
-      "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "q-2",
-    name: "sunset-live-kandy-02.jpg",
-    progress: 100,
-    type: "image",
-    thumbnail:
-      "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "q-3",
-    name: "crowd-wide-03.jpg",
-    progress: 68,
-    type: "image",
-    thumbnail:
-      "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "q-4",
-    name: "highlight-reel.mp4 · 412 MB",
-    progress: 24,
-    type: "video",
-    thumbnail:
-      "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80",
-  },
-];
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const VIDEO_ITEM_ID = "q-video";
 
 const CATEGORY_MAP: { label: string; value: MediaCategory }[] = [
   { label: "Concert", value: "Concerts" },
@@ -71,15 +40,19 @@ export default function AdminUploadMediaPage() {
   const { addProject } = useLiveImage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [queue, setQueue] = useState<QueuedFile[]>(INITIAL_QUEUE);
-  const [title, setTitle] = useState("Sunset Live — Kandy 2026");
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
+  const [title, setTitle] = useState("");
   const [category, setCategory] = useState<MediaCategory>("Concerts");
-  const [eventDate, setEventDate] = useState("18 Oct 2026");
-  const [description, setDescription] = useState(
-    "6-camera coverage with live stream on YouTube..."
-  );
+  const [eventDate, setEventDate] = useState("");
+  const [description, setDescription] = useState("");
   const [youtubeLink, setYoutubeLink] = useState("");
+  const [videoEmbed, setVideoEmbed] = useState<{
+    embedUrl: string;
+    thumbnail?: string;
+  } | null>(null);
   const [showYoutubeInput, setShowYoutubeInput] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // 3 Toggle Switches
   const [featuredOnHome, setFeaturedOnHome] = useState(true);
@@ -92,95 +65,171 @@ export default function AdminUploadMediaPage() {
     title: string;
   } | null>(null);
 
-  // Simulate realistic progress bar advancement
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setQueue((prev) =>
-        prev.map((item) => {
-          if (item.progress >= 100) return item;
-          const next = Math.min(100, item.progress + 8);
-          return { ...item, progress: next };
-        })
-      );
-    }, 900);
-    return () => clearInterval(timer);
-  }, []);
+  const updateItem = (id: string, patch: Partial<QueuedFile>) =>
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)));
 
-  const handleFilesAdded = (fileList: FileList | null) => {
+  const handleFilesAdded = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const added: QueuedFile[] = Array.from(fileList).map((file, i) => {
-      const isVideo = file.type.startsWith("video");
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      return {
-        id: `q-user-${Date.now()}-${i}`,
-        name: isVideo ? `${file.name} · ${sizeMB} MB` : file.name,
-        progress: 15,
-        type: isVideo ? "video" : "image",
-        thumbnail: isVideo
-          ? "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=400&q=80"
-          : "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=400&q=80",
-      };
-    });
-    setQueue((prev) => [...added, ...prev]);
+    setFormError(null);
+    const files = Array.from(fileList);
+    const images = files.filter((f) => ACCEPTED_IMAGE_TYPES.includes(f.type));
+
+    if (files.some((f) => f.type.startsWith("video"))) {
+      setFormError(
+        "Video files are too large to store here. Upload the video to YouTube or Vimeo and add the link instead."
+      );
+    } else if (images.length < files.length) {
+      setFormError("Only JPG, PNG and WebP photos can be uploaded.");
+    }
+    if (images.length === 0) return;
+
+    const items: QueuedFile[] = images.map((file, i) => ({
+      id: `q-${Date.now()}-${i}`,
+      name: file.name,
+      progress: 0,
+      type: "image",
+      thumbnail: URL.createObjectURL(file),
+      status: "uploading",
+    }));
+    setQueue((prev) => [...items, ...prev]);
+
+    let prepared: Blob[];
+    try {
+      prepared = await Promise.all(
+        images.map((file) =>
+          prepareImage(file, { compress: autoCompress, watermark: addWatermark })
+        )
+      );
+    } catch {
+      items.forEach((item) =>
+        updateItem(item.id, { status: "error", error: "Could not read photo" })
+      );
+      return;
+    }
+
+    const result = await createUploadUrls(
+      prepared.map((blob) => ({ type: blob.type, size: blob.size }))
+    ).catch(() => null);
+    if (!result || !result.ok) {
+      const error =
+        result && !result.ok ? result.error : "Could not start the upload";
+      items.forEach((item) => updateItem(item.id, { status: "error", error }));
+      return;
+    }
+
+    await Promise.all(
+      items.map(async (item, i) => {
+        const { uploadUrl, publicUrl } = result.data[i];
+        try {
+          await uploadWithProgress(uploadUrl, prepared[i], (progress) =>
+            updateItem(item.id, { progress })
+          );
+          updateItem(item.id, {
+            status: "done",
+            progress: 100,
+            url: publicUrl,
+            sizeMB: prepared[i].size / (1024 * 1024),
+          });
+        } catch (e) {
+          updateItem(item.id, {
+            status: "error",
+            error: e instanceof Error ? e.message : "Upload failed",
+          });
+        }
+      })
+    );
+  };
+
+  const removeItem = (id: string) => {
+    setQueue((prev) => prev.filter((q) => q.id !== id));
+    if (id === VIDEO_ITEM_ID) setVideoEmbed(null);
   };
 
   const handleAddYoutube = () => {
-    if (!youtubeLink.trim()) return;
+    const embed = toEmbedUrl(youtubeLink);
+    if (!embed) {
+      setFormError("Please paste a YouTube or Vimeo video link.");
+      return;
+    }
+    setFormError(null);
+    setVideoEmbed(embed);
     setQueue((prev) => [
       {
-        id: `q-yt-${Date.now()}`,
-        name: `YouTube Stream: ${youtubeLink.trim()}`,
+        id: VIDEO_ITEM_ID,
+        name: `Video: ${youtubeLink.trim()}`,
         progress: 100,
         type: "video",
-        thumbnail:
-          "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=400&q=80",
+        thumbnail: embed.thumbnail || "/liveimage-logo.png",
+        status: "done",
       },
-      ...prev,
+      ...prev.filter((q) => q.id !== VIDEO_ITEM_ID),
     ]);
+    setYoutubeLink("");
     setShowYoutubeInput(false);
   };
 
   const handleSaveOrPublish = async (status: PublishStatus) => {
-    if (!title.trim()) return;
+    setFormError(null);
+    if (!title.trim()) {
+      setFormError("Please enter a project / album name.");
+      return;
+    }
+    if (queue.some((q) => q.status === "uploading")) {
+      setFormError("Please wait until all photos finish uploading.");
+      return;
+    }
+    const photos = queue.filter((q) => q.type === "image" && q.url);
+    if (photos.length === 0 && !videoEmbed) {
+      setFormError("Add at least one photo or a YouTube / Vimeo link.");
+      return;
+    }
 
-    const hasVideo = queue.some((q) => q.type === "video") || !!youtubeLink;
-    const imageItems = queue.filter((q) => q.type === "image");
+    // Queue shows newest first; keep the photos in the order they were added
+    const photoUrls = photos.map((q) => q.url as string).reverse();
+    const totalMB = photos.reduce((sum, q) => sum + (q.sizeMB ?? 0), 0);
 
+    setIsSaving(true);
     try {
       await addProject({
         title: title.trim(),
         category,
-        type: hasVideo && imageItems.length > 0 ? "both" : hasVideo ? "video" : "photos",
-        eventDate: eventDate.trim() || "18 Oct 2026",
-        description:
-          description.trim() ||
-          "Multi-camera 4K live production and event coverage.",
+        type:
+          videoEmbed && photos.length > 0
+            ? "both"
+            : videoEmbed
+            ? "video"
+            : "photos",
+        eventDate: eventDate.trim() || "TBD",
+        description: description.trim(),
         subtitle: `${category} · ${
-          hasVideo ? "Multi-cam 4K Video" : `${imageItems.length || 24} Photos`
+          videoEmbed ? "Multi-cam 4K Video" : `${photos.length} Photos`
         }`,
         thumbnailUrl:
-          queue[0]?.thumbnail ||
-          "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80",
-        videoUrl: youtubeLink.trim()
-          ? youtubeLink.trim()
-          : "https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1",
-        duration: "3:42",
-        photoCount: Math.max(imageItems.length * 12, 24),
-        photos: queue.map((q) => q.thumbnail),
-        cameraCount: 6,
+          photoUrls[0] || videoEmbed?.thumbnail || "/liveimage-logo.png",
+        videoUrl: videoEmbed?.embedUrl,
+        photoCount: photos.length,
+        photos: photoUrls,
+        cameraCount: 4,
         featuredOnHome,
         autoCompress,
         addWatermark,
         status,
-        fileSizeMB: 412,
+        fileSizeMB: Math.round(totalMB * 10) / 10,
         visualTheme: "stage-beams",
       });
     } catch {
       // addProject already told the user what went wrong
       return;
+    } finally {
+      setIsSaving(false);
     }
 
     setPublishedToast({ status, title: title.trim() });
+    setQueue([]);
+    setVideoEmbed(null);
+    setTitle("");
+    setEventDate("");
+    setDescription("");
   };
 
   return (
@@ -201,19 +250,30 @@ export default function AdminUploadMediaPage() {
           <button
             type="button"
             onClick={() => handleSaveOrPublish("Draft")}
-            className="px-4 py-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 font-heading font-semibold text-xs text-gray-700 transition"
+            disabled={isSaving}
+            className="px-4 py-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 font-heading font-semibold text-xs text-gray-700 transition"
           >
             Save as draft
           </button>
           <button
             type="button"
             onClick={() => handleSaveOrPublish("Live")}
-            className="px-5 py-2.5 rounded-xl bg-rec hover:bg-[#d12820] text-white font-heading font-semibold text-xs shadow-md shadow-rec/25 transition"
+            disabled={isSaving}
+            className="px-5 py-2.5 rounded-xl bg-rec hover:bg-[#d12820] disabled:opacity-60 text-white font-heading font-semibold text-xs shadow-md shadow-rec/25 transition"
           >
             Publish to website
           </button>
         </div>
       </div>
+
+      {formError && (
+        <div
+          role="alert"
+          className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-900"
+        >
+          {formError}
+        </div>
+      )}
 
       {/* Confirmation Banner */}
       {publishedToast && (
@@ -274,19 +334,22 @@ export default function AdminUploadMediaPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,video/*"
+              accept="image/jpeg,image/png,image/webp"
               className="hidden"
-              onChange={(e) => handleFilesAdded(e.target.files)}
+              onChange={(e) => {
+                handleFilesAdded(e.target.files);
+                e.target.value = "";
+              }}
             />
             <div className="w-12 h-12 rounded-full bg-rose-100 text-rec flex items-center justify-center mx-auto mb-3">
               <Upload className="w-5 h-5" />
             </div>
             <h3 className="font-heading font-bold text-sm sm:text-base text-gray-900">
-              Drag &amp; drop photos and videos here
+              Drag &amp; drop photos here
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              JPG, PNG, MP4, MOV · up to 2 GB per video · or paste a YouTube
-              link
+              JPG, PNG, WebP · up to 20 MB per photo · for videos, add a
+              YouTube or Vimeo link
             </p>
 
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
@@ -328,26 +391,19 @@ export default function AdminUploadMediaPage() {
 
           {/* Uploading Files Progress List */}
           <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-heading font-bold text-sm text-gray-900">
-                Uploading ({queue.length} files)
-              </h3>
-              <button
-                type="button"
-                onClick={() =>
-                  setQueue((prev) =>
-                    prev.map((q) => ({ ...q, progress: 100 }))
-                  )
-                }
-                className="text-[11px] font-semibold text-rec hover:underline"
-              >
-                Complete all now
-              </button>
-            </div>
+            <h3 className="font-heading font-bold text-sm text-gray-900">
+              Files in this project ({queue.length})
+            </h3>
 
             <div className="space-y-3.5">
+              {queue.length === 0 && (
+                <p className="text-xs text-gray-400">
+                  No files yet. Add photos or a video link above.
+                </p>
+              )}
               {queue.map((item) => {
-                const isDone = item.progress >= 100;
+                const isDone = item.status === "done";
+                const isError = item.status === "error";
                 return (
                   <div
                     key={item.id}
@@ -365,21 +421,44 @@ export default function AdminUploadMediaPage() {
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                            isDone
+                            isError
+                              ? "bg-rose-100 text-rose-800"
+                              : isDone
                               ? "bg-emerald-100 text-emerald-800"
                               : "bg-amber-100 text-amber-800"
                           }`}
                         >
-                          {isDone ? "Done" : `${item.progress}%`}
+                          {isError
+                            ? "Failed"
+                            : isDone
+                            ? "Done"
+                            : `${item.progress}%`}
                         </span>
                       </div>
                       <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
                           style={{ width: `${item.progress}%` }}
-                          className="h-full bg-rec rounded-full transition-all duration-500"
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isError ? "bg-rose-300" : "bg-rec"
+                          }`}
                         />
                       </div>
+                      {isError && (
+                        <p className="text-[11px] text-rose-700 mt-1">
+                          {item.error}
+                        </p>
+                      )}
                     </div>
+                    {item.status !== "uploading" && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        aria-label={`Remove ${item.name}`}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-rec hover:bg-rose-50 shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -402,6 +481,7 @@ export default function AdminUploadMediaPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Sunset Live — Kandy 2026"
               className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs sm:text-sm font-medium text-gray-900 focus:outline-none focus:border-rec"
             />
           </div>
@@ -441,6 +521,7 @@ export default function AdminUploadMediaPage() {
               type="text"
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
+              placeholder="e.g. 18 Oct 2026"
               className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs sm:text-sm text-gray-900 focus:outline-none focus:border-rec"
             />
           </div>
@@ -454,6 +535,7 @@ export default function AdminUploadMediaPage() {
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. 6-camera coverage with live stream on YouTube"
               className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs sm:text-sm text-gray-700 focus:outline-none focus:border-rec"
             />
           </div>
@@ -494,7 +576,7 @@ export default function AdminUploadMediaPage() {
                   Auto-compress images
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  Keeps the website fast on 4G
+                  Keeps the website fast on 4G · applies to photos added next
                 </div>
               </div>
               <button
@@ -521,7 +603,7 @@ export default function AdminUploadMediaPage() {
                   Add watermark
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  Live Image LK logo overlay
+                  Live Image LK logo overlay · applies to photos added next
                 </div>
               </div>
               <button

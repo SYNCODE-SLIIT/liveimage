@@ -32,10 +32,7 @@ export default function AdminMediaLibraryPage() {
 
   const [activeTab, setActiveTab] = useState<LibraryTab>("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([
-    "proj-colombo-music-fest",
-    "proj-nadeesha-ruwan",
-  ]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -222,6 +219,12 @@ export default function AdminMediaLibraryPage() {
               type="button"
               disabled={userRole === "staff"}
               onClick={() => {
+                if (
+                  !window.confirm(
+                    `Delete ${selectedIds.length} item(s) and their photos permanently?`
+                  )
+                )
+                  return;
                 deleteProjects(selectedIds);
                 setSelectedIds([]);
                 triggerNotice("Deleted selected media items.");
