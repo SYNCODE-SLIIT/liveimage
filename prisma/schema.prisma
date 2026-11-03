@@ -154,3 +154,13 @@ model SiteSettings {
   clientLogos         String[] @default([])
   updatedAt           DateTime @updatedAt
 }
+
+// Recent events used for rate limiting (failed logins, booking submissions)
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  bucket    String // e.g. "login-email", "login-ip", "booking-ip"
+  key       String // email or hashed IP
+  createdAt DateTime @default(now())
+
+  @@index([bucket, key, createdAt])
+}

@@ -36,7 +36,13 @@ function LoginForm() {
     });
     setIsSubmitting(false);
     if (!result || result.error) {
-      setError("Email or password is incorrect.");
+      // "CredentialsSignin" means a wrong email/password; anything else is
+      // a message from the server, such as the too-many-attempts lockout
+      setError(
+        result?.error && result.error !== "CredentialsSignin"
+          ? result.error
+          : "Email or password is incorrect."
+      );
       return;
     }
     router.replace(callbackUrl);

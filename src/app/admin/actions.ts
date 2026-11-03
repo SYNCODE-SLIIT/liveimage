@@ -221,7 +221,7 @@ const uploadRequestSchema = z
   .array(
     z.object({
       type: z.enum(IMAGE_TYPES as [string, ...string[]], {
-        errorMap: () => ({ message: "Only JPG, PNG and WebP photos can be uploaded" }),
+        error: "Only JPG, PNG and WebP photos can be uploaded",
       }),
       size: z
         .number()

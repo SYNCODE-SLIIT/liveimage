@@ -3,6 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { sendBookingNotification } from "@/lib/notify";
 import { toBooking } from "@/lib/siteData";
+import { clientIp, countRecent, hashIp, recordEvent } from "@/lib/rateLimit";
+
+const BOOKINGS_PER_IP_PER_HOUR = 5;
 
 const bookingSchema = z.object({
   clientName: z.string().trim().min(2, "Please enter your name").max(100),
@@ -22,6 +25,14 @@ const bookingSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const ip = hashIp(clientIp(req.headers));
+  if ((await countRecent("booking-ip", ip, 60 * 60 * 1000)) >= BOOKINGS_PER_IP_PER_HOUR) {
+    return NextResponse.json(
+      { error: "Too many requests. Please call or WhatsApp us instead." },
+      { status: 429 }
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -36,6 +47,8 @@ export async function POST(req: Request) {
   }
 
   const { website, ...data } = parsed.data;
+
+  await recordEvent("booking-ip", ip);
 
   // Bots that fill the honeypot get a fake success and nothing is stored
   if (website) {
