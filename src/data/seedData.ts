@@ -229,12 +229,12 @@ export const INITIAL_MEDIA_PROJECTS: MediaProject[] = [
     description:
       "8-camera stadium sports broadcast complete with live scoreboard graphics, slow-motion instant replay, boundary cameras and drone aerials.",
     subtitle: "Sports broadcast · 8 cameras",
-    thumbnailUrl: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1200&q=80",
+    thumbnailUrl: "https://images.unsplash.com/photo-1512719994953-eabf50895df7?auto=format&fit=crop&w=1200&q=80",
     videoUrl: "https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1",
     duration: "1:58",
     photoCount: 18,
     photos: [
-      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1400&q=80",
+      "https://images.unsplash.com/photo-1512719994953-eabf50895df7?auto=format&fit=crop&w=1400&q=80",
       "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=1400&q=80",
     ],
     cameraCount: 8,

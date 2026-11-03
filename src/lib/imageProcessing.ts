@@ -46,8 +46,15 @@ export async function prepareImage(
     ctx.globalAlpha = 1;
   }
 
-  // PNGs keep transparency unless we are compressing
-  const type = !options.compress && file.type === "image/png" ? "image/png" : "image/jpeg";
+  // JPEG has no transparency (clear areas turn black), so PNG/WebP input
+  // stays PNG, or becomes WebP when compressing. Browsers that cannot encode
+  // WebP fall back to PNG, which the bucket also accepts.
+  const hasAlpha = file.type === "image/png" || file.type === "image/webp";
+  const type = hasAlpha
+    ? options.compress
+      ? "image/webp"
+      : "image/png"
+    : "image/jpeg";
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, type, options.compress ? 0.85 : 0.92)
   );
