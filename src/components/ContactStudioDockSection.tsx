@@ -321,10 +321,12 @@ export function ContactStudioDockSection({
     (calcLed ? 35000 : 0) +
     (calcDrone ? 30000 : 0);
 
+  // Signed-in admins also receive drafts, so keep the public gallery to Live work
+  const liveProjects = projects.filter((p) => p.status === "Live");
   const filteredGallery =
     galleryFilter === "All"
-      ? projects.slice(0, 6)
-      : projects
+      ? liveProjects.slice(0, 6)
+      : liveProjects
           .filter(
             (p) => p.category.toLowerCase() === galleryFilter.toLowerCase()
           )

@@ -63,7 +63,8 @@ export default function HomePage() {
   const featuredProjects = projects.filter(
     (p) => p.featuredOnHome && p.status === "Live"
   );
-  const mainFeatured = featuredProjects[0] || projects[0];
+  const mainFeatured =
+    featuredProjects[0] || projects.find((p) => p.status === "Live");
   const secondaryFeatured = featuredProjects.slice(1, 5);
 
   const clientCarouselItems: CarouselItem[] = (

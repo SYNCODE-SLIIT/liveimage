@@ -4,6 +4,9 @@ import "./globals.css";
 import { LiveImageProvider } from "@/context/LiveImageContext";
 import { ClientShell } from "@/components/ClientShell";
 import { AuthSessionProvider } from "@/components/AuthSessionProvider";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getFallbackSiteData, getSiteData, SiteData } from "@/lib/siteData";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -33,16 +36,26 @@ export const metadata: Metadata = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getServerSession(authOptions);
+  const includeUnpublished = !!session;
+  let siteData: SiteData;
+  try {
+    siteData = await getSiteData(includeUnpublished);
+  } catch (e) {
+    console.error("Failed to load site data from the database", e);
+    siteData = getFallbackSiteData(includeUnpublished);
+  }
+
   return (
     <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
       <body className="antialiased selection:bg-rec selection:text-white">
         <AuthSessionProvider>
-          <LiveImageProvider>
+          <LiveImageProvider initialData={siteData}>
             <ClientShell>{children}</ClientShell>
           </LiveImageProvider>
         </AuthSessionProvider>

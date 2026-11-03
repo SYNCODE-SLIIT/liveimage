@@ -2,14 +2,11 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import type { SiteData } from "@/lib/siteData";
 import {
   BookingRequest,
   BookingStatus,
   INITIAL_BOOKINGS,
-  INITIAL_MEDIA_PROJECTS,
-  INITIAL_PACKAGES,
-  INITIAL_SITE_SETTINGS,
-  INITIAL_TESTIMONIALS,
   MediaCategory,
   MediaProject,
   PublishStatus,
@@ -50,23 +47,29 @@ const LiveImageContext = createContext<LiveImageContextType | undefined>(
   undefined
 );
 
+// Site content comes from the database (initialData). Bookings still live in
+// the browser until the admin pages read them from the database.
 const STORAGE_KEYS = {
-  SETTINGS: "liveimage_settings_v1",
-  PROJECTS: "liveimage_projects_v1",
   BOOKINGS: "liveimage_bookings_v1",
-  PACKAGES: "liveimage_packages_v1",
-  TESTIMONIALS: "liveimage_testimonials_v1",
 };
 
-export function LiveImageProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<SiteSettings>(INITIAL_SITE_SETTINGS);
+export function LiveImageProvider({
+  children,
+  initialData,
+}: {
+  children: React.ReactNode;
+  initialData: SiteData;
+}) {
+  const [settings, setSettings] = useState<SiteSettings>(initialData.settings);
   const [projects, setProjects] = useState<MediaProject[]>(
-    INITIAL_MEDIA_PROJECTS
+    initialData.projects
   );
   const [bookings, setBookings] = useState<BookingRequest[]>(INITIAL_BOOKINGS);
-  const [packages, setPackages] = useState<ServicePackage[]>(INITIAL_PACKAGES);
+  const [packages, setPackages] = useState<ServicePackage[]>(
+    initialData.packages
+  );
   const [testimonials, setTestimonials] = useState<Testimonial[]>(
-    INITIAL_TESTIMONIALS
+    initialData.testimonials
   );
   const { data: session } = useSession();
   // Role comes from the signed-in account; no session means least access
@@ -75,20 +78,8 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
-
-      const savedProjects = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      if (savedProjects) setProjects(JSON.parse(savedProjects));
-
       const savedBookings = localStorage.getItem(STORAGE_KEYS.BOOKINGS);
       if (savedBookings) setBookings(JSON.parse(savedBookings));
-
-      const savedPackages = localStorage.getItem(STORAGE_KEYS.PACKAGES);
-      if (savedPackages) setPackages(JSON.parse(savedPackages));
-
-      const savedTestimonials = localStorage.getItem(STORAGE_KEYS.TESTIMONIALS);
-      if (savedTestimonials) setTestimonials(JSON.parse(savedTestimonials));
     } catch (e) {
       console.error("Failed to load state from localStorage", e);
     } finally {
@@ -97,23 +88,11 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateSettings = (partial: Partial<SiteSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...partial };
-      try {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setSettings((prev) => ({ ...prev, ...partial }));
   };
 
   const saveProjects = (updater: (prev: MediaProject[]) => MediaProject[]) => {
-    setProjects((prev) => {
-      const next = updater(prev);
-      try {
-        localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setProjects(updater);
   };
 
   const addProject = (
@@ -211,15 +190,9 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updatePackage = (id: string, partial: Partial<ServicePackage>) => {
-    setPackages((prev) => {
-      const next = prev.map((pkg) =>
-        pkg.id === id ? { ...pkg, ...partial } : pkg
-      );
-      try {
-        localStorage.setItem(STORAGE_KEYS.PACKAGES, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setPackages((prev) =>
+      prev.map((pkg) => (pkg.id === id ? { ...pkg, ...partial } : pkg))
+    );
   };
 
   const addTestimonial = (testimonial: Omit<Testimonial, "id">) => {
@@ -227,31 +200,19 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
       ...testimonial,
       id: `test-${Date.now()}`,
     };
-    setTestimonials((prev) => {
-      const next = [newT, ...prev];
-      try {
-        localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setTestimonials((prev) => [newT, ...prev]);
   };
 
   const deleteTestimonial = (id: string) => {
-    setTestimonials((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      try {
-        localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setTestimonials((prev) => prev.filter((t) => t.id !== id));
   };
 
   const resetDemoData = () => {
-    setSettings(INITIAL_SITE_SETTINGS);
-    setProjects(INITIAL_MEDIA_PROJECTS);
+    setSettings(initialData.settings);
+    setProjects(initialData.projects);
     setBookings(INITIAL_BOOKINGS);
-    setPackages(INITIAL_PACKAGES);
-    setTestimonials(INITIAL_TESTIMONIALS);
+    setPackages(initialData.packages);
+    setTestimonials(initialData.testimonials);
     try {
       Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
     } catch {}
