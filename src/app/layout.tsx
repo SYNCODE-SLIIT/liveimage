@@ -7,6 +7,7 @@ import { AuthSessionProvider } from "@/components/AuthSessionProvider";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getFallbackSiteData, getSiteData, SiteData } from "@/lib/siteData";
+import type { UserRole } from "@/data/seedData";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -41,8 +42,15 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getServerSession(authOptions);
-  const role = session?.user.role ?? null;
+  // A broken auth setup (e.g. missing NEXTAUTH_SECRET) must not take the
+  // public site down; visitors are simply treated as signed out
+  let role: UserRole | null = null;
+  try {
+    const session = await getServerSession(authOptions);
+    role = session?.user.role ?? null;
+  } catch (e) {
+    console.error("Failed to read the login session", e);
+  }
   let siteData: SiteData;
   try {
     siteData = await getSiteData(role);
