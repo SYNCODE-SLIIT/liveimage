@@ -140,40 +140,45 @@ export default function AdminUploadMediaPage() {
     setShowYoutubeInput(false);
   };
 
-  const handleSaveOrPublish = (status: PublishStatus) => {
+  const handleSaveOrPublish = async (status: PublishStatus) => {
     if (!title.trim()) return;
 
     const hasVideo = queue.some((q) => q.type === "video") || !!youtubeLink;
     const imageItems = queue.filter((q) => q.type === "image");
 
-    addProject({
-      title: title.trim(),
-      category,
-      type: hasVideo && imageItems.length > 0 ? "both" : hasVideo ? "video" : "photos",
-      eventDate: eventDate.trim() || "18 Oct 2026",
-      description:
-        description.trim() ||
-        "Multi-camera 4K live production and event coverage.",
-      subtitle: `${category} · ${
-        hasVideo ? "Multi-cam 4K Video" : `${imageItems.length || 24} Photos`
-      }`,
-      thumbnailUrl:
-        queue[0]?.thumbnail ||
-        "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80",
-      videoUrl: youtubeLink.trim()
-        ? youtubeLink.trim()
-        : "https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1",
-      duration: "3:42",
-      photoCount: Math.max(imageItems.length * 12, 24),
-      photos: queue.map((q) => q.thumbnail),
-      cameraCount: 6,
-      featuredOnHome,
-      autoCompress,
-      addWatermark,
-      status,
-      fileSizeMB: 412,
-      visualTheme: "stage-beams",
-    });
+    try {
+      await addProject({
+        title: title.trim(),
+        category,
+        type: hasVideo && imageItems.length > 0 ? "both" : hasVideo ? "video" : "photos",
+        eventDate: eventDate.trim() || "18 Oct 2026",
+        description:
+          description.trim() ||
+          "Multi-camera 4K live production and event coverage.",
+        subtitle: `${category} · ${
+          hasVideo ? "Multi-cam 4K Video" : `${imageItems.length || 24} Photos`
+        }`,
+        thumbnailUrl:
+          queue[0]?.thumbnail ||
+          "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80",
+        videoUrl: youtubeLink.trim()
+          ? youtubeLink.trim()
+          : "https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1",
+        duration: "3:42",
+        photoCount: Math.max(imageItems.length * 12, 24),
+        photos: queue.map((q) => q.thumbnail),
+        cameraCount: 6,
+        featuredOnHome,
+        autoCompress,
+        addWatermark,
+        status,
+        fileSizeMB: 412,
+        visualTheme: "stage-beams",
+      });
+    } catch {
+      // addProject already told the user what went wrong
+      return;
+    }
 
     setPublishedToast({ status, title: title.trim() });
   };

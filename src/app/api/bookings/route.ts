@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { sendBookingNotification } from "@/lib/notify";
-import type { BookingRequest } from "@/data/seedData";
+import { toBooking } from "@/lib/siteData";
 
 const bookingSchema = z.object({
   clientName: z.string().trim().min(2, "Please enter your name").max(100),
@@ -50,20 +50,7 @@ export async function POST(req: Request) {
     },
   });
 
-  const booking: BookingRequest = {
-    id: row.id,
-    clientName: row.clientName,
-    phone: row.phone,
-    email: row.email ?? "",
-    eventType: data.eventType,
-    eventDate: row.eventDate,
-    venue: row.venue,
-    cameraSetup: data.cameraSetup,
-    liveStream: row.liveStream,
-    notes: row.notes ?? "",
-    status: row.status,
-    createdAt: row.createdAt.toISOString().split("T")[0],
-  };
+  const booking = toBooking(row);
 
   // A failed email must not lose the booking, which is already saved
   try {

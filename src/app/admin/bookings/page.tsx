@@ -35,10 +35,10 @@ export default function AdminBookingsCRMPage() {
     filterStatus === "All" ? true : b.status === filterStatus
   );
 
-  const newCount = bookings.filter((b) => b.status === "New").length + 3;
-  const quotedCount = bookings.filter((b) => b.status === "Quoted").length + 8;
-  const confirmedCount =
-    bookings.filter((b) => b.status === "Confirmed").length + 12;
+  const newCount = bookings.filter((b) => b.status === "New").length;
+  const quotedCount = bookings.filter((b) => b.status === "Quoted").length;
+  const confirmedCount = bookings.filter((b) => b.status === "Confirmed").length;
+  const completedCount = bookings.filter((b) => b.status === "Completed").length;
 
   const cycleStatus = (bk: BookingRequest) => {
     const idx = STATUS_SEQUENCE.indexOf(bk.status);
@@ -155,16 +155,16 @@ export default function AdminBookingsCRMPage() {
         </div>
         <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm">
           <span className="text-xs text-gray-500 block">
-            Confirmed (Oct–Dec)
+            Confirmed
           </span>
           <div className="mt-1.5 font-heading font-bold text-2xl sm:text-3xl text-gray-900">
             {confirmedCount}
           </div>
         </div>
         <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-sm">
-          <span className="text-xs text-gray-500 block">Avg. response time</span>
+          <span className="text-xs text-gray-500 block">Completed</span>
           <div className="mt-1.5 font-heading font-bold text-2xl sm:text-3xl text-gray-900">
-            3.2 h
+            {completedCount}
           </div>
         </div>
       </div>

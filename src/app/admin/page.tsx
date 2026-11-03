@@ -13,11 +13,17 @@ import {
   ArrowRight,
   TrendingUp,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { useLiveImage } from "@/context/LiveImageContext";
 import { VISITOR_STATS_8_MONTHS } from "@/data/seedData";
 
 export default function AdminDashboardOverview() {
-  const { projects, bookings, updateProject, userRole } = useLiveImage();
+  const { projects, bookings, updateProject } = useLiveImage();
+  const { data: session } = useSession();
+  const firstName = session?.user?.name?.split(" ")[0] || "there";
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredMonth, setHoveredMonth] = useState<string | null>("Oct");
 
@@ -26,7 +32,9 @@ export default function AdminDashboardOverview() {
   const recentUploads = projects.slice(0, 3);
 
   const liveProjectsCount = projects.filter((p) => p.status === "Live").length;
-  const totalPhotosAndVideos = 1274 + liveProjectsCount;
+  const newBookingsCount = bookings.filter((b) => b.status === "New").length;
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().split("T")[0];
+  const bookingsThisWeek = bookings.filter((b) => b.createdAt >= weekAgo).length;
 
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
@@ -47,7 +55,7 @@ export default function AdminDashboardOverview() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="font-heading font-bold text-2xl sm:text-3xl text-gray-900">
-            Good evening, {userRole === "owner" ? "Damith" : "Team"}
+            {greeting}, {firstName}
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
             Here&apos;s what&apos;s happening with your website this month.
@@ -104,10 +112,10 @@ export default function AdminDashboardOverview() {
             New booking requests
           </span>
           <div className="mt-2 font-heading font-bold text-2xl sm:text-3xl text-gray-900">
-            {17 + bookings.length}
+            {newBookingsCount}
           </div>
           <div className="mt-1.5 text-xs font-semibold text-emerald-600">
-            ▲ {bookings.filter((b) => b.status === "New").length + 4} this week
+            {bookingsThisWeek} received this week
           </div>
         </Link>
 
@@ -116,13 +124,13 @@ export default function AdminDashboardOverview() {
           className="bg-white border border-gray-200/80 hover:border-rec/40 rounded-2xl p-5 shadow-sm transition block"
         >
           <span className="text-xs text-gray-500 block">
-            Photos &amp; videos live
+            Projects live
           </span>
           <div className="mt-2 font-heading font-bold text-2xl sm:text-3xl text-gray-900">
-            {totalPhotosAndVideos.toLocaleString()}
+            {liveProjectsCount}
           </div>
           <div className="mt-1.5 text-xs font-medium text-gray-500">
-            +64 uploaded this month
+            {projects.length - liveProjectsCount} draft or hidden
           </div>
         </Link>
 

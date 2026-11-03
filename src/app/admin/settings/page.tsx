@@ -8,7 +8,6 @@ import {
   Star,
   Plus,
   Trash2,
-  RotateCcw,
   CheckCircle2,
   Shield,
   Home,
@@ -28,7 +27,8 @@ export default function AdminSettingsPage() {
     addTestimonial,
     deleteTestimonial,
     userRole,
-    resetDemoData,
+    saveSettings,
+    savePackage,
   } = useLiveImage();
 
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
@@ -43,16 +43,21 @@ export default function AdminSettingsPage() {
     setTimeout(() => setSavedNotice(null), 3500);
   };
 
-  const handleAddReview = (e: React.FormEvent) => {
+  const handleSave = async (msg: string) => {
+    if (await saveSettings()) showSaved(msg);
+  };
+
+  const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClientName.trim() || !newQuote.trim()) return;
-    addTestimonial({
+    const added = await addTestimonial({
       clientName: newClientName.trim(),
       clientRole: newClientRole.trim() || "Event Client",
       quote: newQuote.trim(),
       rating: 5,
       avatarColor: "#E8332B",
     });
+    if (!added) return;
     setNewClientName("");
     setNewClientRole("");
     setNewQuote("");
@@ -73,17 +78,6 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => {
-              resetDemoData();
-              showSaved("Demo seed data restored to defaults.");
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-xs font-semibold text-gray-600 transition"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo Data</span>
-          </button>
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rec hover:bg-[#d12820] text-white font-heading font-semibold text-xs shadow-sm transition"
@@ -120,7 +114,7 @@ export default function AdminSettingsPage() {
           <button
             type="button"
             onClick={() =>
-              showSaved("Home page hero & trust numbers updated live!")
+              handleSave("Home page hero & trust numbers updated live!")
             }
             className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-heading font-semibold text-xs transition"
           >
@@ -236,7 +230,7 @@ export default function AdminSettingsPage() {
               </h2>
               <p className="text-xs text-gray-500">
                 Control whether starting LKR prices or &ldquo;Custom Quote&rdquo;
-                appear on /services
+                appear on /services. Price edits save when you leave the field.
               </p>
             </div>
           </div>
@@ -250,9 +244,9 @@ export default function AdminSettingsPage() {
               type="button"
               role="switch"
               aria-checked={settings.showPackagePrices}
-              onClick={() => {
+              onClick={async () => {
                 const next = !settings.showPackagePrices;
-                updateSettings({ showPackagePrices: next });
+                if (!(await saveSettings({ showPackagePrices: next }))) return;
                 showSaved(
                   next
                     ? "Package starting prices are now VISIBLE on /services!"
@@ -296,6 +290,7 @@ export default function AdminSettingsPage() {
                   onChange={(e) =>
                     updatePackage(pkg.id, { priceLKR: e.target.value })
                   }
+                  onBlur={() => savePackage(pkg.id)}
                   className="w-full px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-bold text-gray-900"
                 />
               </div>
@@ -309,6 +304,7 @@ export default function AdminSettingsPage() {
                   onChange={(e) =>
                     updatePackage(pkg.id, { subtitle: e.target.value })
                   }
+                  onBlur={() => savePackage(pkg.id)}
                   className="w-full px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs text-gray-700"
                 />
               </div>
@@ -440,7 +436,7 @@ export default function AdminSettingsPage() {
           </div>
           <button
             type="button"
-            onClick={() => showSaved("Contact & social links saved!")}
+            onClick={() => handleSave("Contact & social links saved!")}
             className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-heading font-semibold text-xs transition"
           >
             Save Contact Info

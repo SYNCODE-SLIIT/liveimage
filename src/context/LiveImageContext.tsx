@@ -1,12 +1,20 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import type { SiteData } from "@/lib/siteData";
+import * as actions from "@/app/admin/actions";
+import type { ActionResult } from "@/app/admin/actions";
 import {
   BookingRequest,
   BookingStatus,
-  INITIAL_BOOKINGS,
   MediaCategory,
   MediaProject,
   PublishStatus,
@@ -18,9 +26,13 @@ import {
 
 interface LiveImageContextType {
   settings: SiteSettings;
+  // Edits settings on screen only; saveSettings() stores them
   updateSettings: (partial: Partial<SiteSettings>) => void;
+  saveSettings: (partial?: Partial<SiteSettings>) => Promise<boolean>;
   projects: MediaProject[];
-  addProject: (project: Omit<MediaProject, "id" | "uploadedAgo">) => MediaProject;
+  addProject: (
+    project: Omit<MediaProject, "id" | "uploadedAgo">
+  ) => Promise<MediaProject>;
   updateProject: (id: string, partial: Partial<MediaProject>) => void;
   deleteProjects: (ids: string[]) => void;
   bulkToggleFeature: (ids: string[], featured?: boolean) => void;
@@ -34,24 +46,19 @@ interface LiveImageContextType {
   updateBookingStatus: (id: string, status: BookingStatus) => void;
   deleteBooking: (id: string) => void;
   packages: ServicePackage[];
+  // Edits a package on screen only; savePackage() stores it
   updatePackage: (id: string, partial: Partial<ServicePackage>) => void;
+  savePackage: (id: string) => Promise<boolean>;
   testimonials: Testimonial[];
-  addTestimonial: (testimonial: Omit<Testimonial, "id">) => void;
+  addTestimonial: (testimonial: Omit<Testimonial, "id">) => Promise<boolean>;
   deleteTestimonial: (id: string) => void;
   userRole: UserRole;
-  resetDemoData: () => void;
   isHydrated: boolean;
 }
 
 const LiveImageContext = createContext<LiveImageContextType | undefined>(
   undefined
 );
-
-// Site content comes from the database (initialData). Bookings still live in
-// the browser until the admin pages read them from the database.
-const STORAGE_KEYS = {
-  BOOKINGS: "liveimage_bookings_v1",
-};
 
 export function LiveImageProvider({
   children,
@@ -60,11 +67,14 @@ export function LiveImageProvider({
   children: React.ReactNode;
   initialData: SiteData;
 }) {
+  const router = useRouter();
   const [settings, setSettings] = useState<SiteSettings>(initialData.settings);
   const [projects, setProjects] = useState<MediaProject[]>(
     initialData.projects
   );
-  const [bookings, setBookings] = useState<BookingRequest[]>(INITIAL_BOOKINGS);
+  const [bookings, setBookings] = useState<BookingRequest[]>(
+    initialData.bookings
+  );
   const [packages, setPackages] = useState<ServicePackage[]>(
     initialData.packages
   );
@@ -76,67 +86,107 @@ export function LiveImageProvider({
   const userRole: UserRole = session?.user?.role ?? "staff";
   const [isHydrated, setIsHydrated] = useState(false);
 
+  // Latest values for saves that run after a state update
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const packagesRef = useRef(packages);
+  packagesRef.current = packages;
+
+  useEffect(() => setIsHydrated(true), []);
+
+  // Fresh server data (after router.refresh or sign-in) replaces local state
   useEffect(() => {
+    setSettings(initialData.settings);
+    setProjects(initialData.projects);
+    setBookings(initialData.bookings);
+    setPackages(initialData.packages);
+    setTestimonials(initialData.testimonials);
+  }, [initialData]);
+
+  // Changes show on screen straight away; if the server refuses one, tell the
+  // admin and reload the real data so the screen matches the database.
+  const persist = async <T,>(
+    pending: Promise<ActionResult<T>>
+  ): Promise<ActionResult<T>> => {
+    let result: ActionResult<T>;
     try {
-      const savedBookings = localStorage.getItem(STORAGE_KEYS.BOOKINGS);
-      if (savedBookings) setBookings(JSON.parse(savedBookings));
-    } catch (e) {
-      console.error("Failed to load state from localStorage", e);
-    } finally {
-      setIsHydrated(true);
+      result = await pending;
+    } catch {
+      result = { ok: false, error: "Could not reach the server. Please try again." };
     }
-  }, []);
+    if (!result.ok) {
+      window.alert(result.error);
+      router.refresh();
+    }
+    return result;
+  };
 
   const updateSettings = (partial: Partial<SiteSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
   };
 
-  const saveProjects = (updater: (prev: MediaProject[]) => MediaProject[]) => {
-    setProjects(updater);
+  const saveSettings = async (partial?: Partial<SiteSettings>) => {
+    const next = { ...settingsRef.current, ...partial };
+    setSettings(next);
+    return (await persist(actions.saveSettings(next))).ok;
   };
 
-  const addProject = (
+  const addProject = async (
     projectData: Omit<MediaProject, "id" | "uploadedAgo">
-  ): MediaProject => {
+  ): Promise<MediaProject> => {
+    const result = await persist(actions.createProject(projectData));
+    if (!result.ok) throw new Error(result.error);
     const newProject: MediaProject = {
       ...projectData,
-      id: `proj-${Date.now()}`,
-      uploadedAgo: "Just now",
+      id: result.data,
+      uploadedAgo: "Today",
     };
-    saveProjects((prev) => [newProject, ...prev]);
+    setProjects((prev) => [newProject, ...prev]);
     return newProject;
   };
 
   const updateProject = (id: string, partial: Partial<MediaProject>) => {
-    saveProjects((prev) =>
+    setProjects((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...partial } : p))
     );
+    persist(actions.updateProject(id, partial));
   };
 
   const deleteProjects = (ids: string[]) => {
-    saveProjects((prev) => prev.filter((p) => !ids.includes(p.id)));
+    setProjects((prev) => prev.filter((p) => !ids.includes(p.id)));
+    persist(actions.deleteProjects(ids));
   };
 
   const bulkToggleFeature = (ids: string[], featured?: boolean) => {
-    saveProjects((prev) =>
-      prev.map((p) => {
-        if (!ids.includes(p.id)) return p;
-        const nextVal = featured !== undefined ? featured : !p.featuredOnHome;
-        return { ...p, featuredOnHome: nextVal };
-      })
+    if (featured === undefined) {
+      // Toggle each project individually
+      projects
+        .filter((p) => ids.includes(p.id))
+        .forEach((p) =>
+          updateProject(p.id, { featuredOnHome: !p.featuredOnHome })
+        );
+      return;
+    }
+    setProjects((prev) =>
+      prev.map((p) =>
+        ids.includes(p.id) ? { ...p, featuredOnHome: featured } : p
+      )
     );
+    persist(actions.updateProjects(ids, { featuredOnHome: featured }));
   };
 
   const bulkSetStatus = (ids: string[], status: PublishStatus) => {
-    saveProjects((prev) =>
+    setProjects((prev) =>
       prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p))
     );
+    persist(actions.updateProjects(ids, { status }));
   };
 
   const bulkMoveCategory = (ids: string[], category: MediaCategory) => {
-    saveProjects((prev) =>
+    setProjects((prev) =>
       prev.map((p) => (ids.includes(p.id) ? { ...p, category } : p))
     );
+    persist(actions.updateProjects(ids, { category }));
   };
 
   const addBooking = async (
@@ -158,35 +208,19 @@ export function LiveImageProvider({
       status: "New",
       createdAt: new Date().toISOString().split("T")[0],
     };
-    // Admin pages still read local state until they move to the database
-    setBookings((prev) => {
-      const next = [newBooking, ...prev];
-      try {
-        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    // Only the owner's admin view lists bookings
+    if (userRole === "owner") setBookings((prev) => [newBooking, ...prev]);
     return newBooking;
   };
 
   const updateBookingStatus = (id: string, status: BookingStatus) => {
-    setBookings((prev) => {
-      const next = prev.map((b) => (b.id === id ? { ...b, status } : b));
-      try {
-        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
+    persist(actions.updateBookingStatus(id, status));
   };
 
   const deleteBooking = (id: string) => {
-    setBookings((prev) => {
-      const next = prev.filter((b) => b.id !== id);
-      try {
-        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    setBookings((prev) => prev.filter((b) => b.id !== id));
+    persist(actions.deleteBooking(id));
   };
 
   const updatePackage = (id: string, partial: Partial<ServicePackage>) => {
@@ -195,27 +229,22 @@ export function LiveImageProvider({
     );
   };
 
-  const addTestimonial = (testimonial: Omit<Testimonial, "id">) => {
-    const newT: Testimonial = {
-      ...testimonial,
-      id: `test-${Date.now()}`,
-    };
-    setTestimonials((prev) => [newT, ...prev]);
+  const savePackage = async (id: string) => {
+    const pkg = packagesRef.current.find((p) => p.id === id);
+    if (!pkg) return false;
+    const { id: _id, ...data } = pkg;
+    return (await persist(actions.savePackage(id, data))).ok;
+  };
+
+  const addTestimonial = async (testimonial: Omit<Testimonial, "id">) => {
+    const result = await persist(actions.addTestimonial(testimonial));
+    if (result.ok) setTestimonials((prev) => [result.data, ...prev]);
+    return result.ok;
   };
 
   const deleteTestimonial = (id: string) => {
     setTestimonials((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const resetDemoData = () => {
-    setSettings(initialData.settings);
-    setProjects(initialData.projects);
-    setBookings(INITIAL_BOOKINGS);
-    setPackages(initialData.packages);
-    setTestimonials(initialData.testimonials);
-    try {
-      Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
-    } catch {}
+    persist(actions.deleteTestimonial(id));
   };
 
   return (
@@ -223,6 +252,7 @@ export function LiveImageProvider({
       value={{
         settings,
         updateSettings,
+        saveSettings,
         projects,
         addProject,
         updateProject,
@@ -236,11 +266,11 @@ export function LiveImageProvider({
         deleteBooking,
         packages,
         updatePackage,
+        savePackage,
         testimonials,
         addTestimonial,
         deleteTestimonial,
         userRole,
-        resetDemoData,
         isHydrated,
       }}
     >

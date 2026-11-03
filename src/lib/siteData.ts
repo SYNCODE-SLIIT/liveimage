@@ -1,5 +1,7 @@
+import type { BookingRequest as BookingRow } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  BookingRequest,
   INITIAL_MEDIA_PROJECTS,
   INITIAL_PACKAGES,
   INITIAL_SITE_SETTINGS,
@@ -8,6 +10,7 @@ import {
   ServicePackage,
   SiteSettings,
   Testimonial,
+  UserRole,
 } from "@/data/seedData";
 
 export interface SiteData {
@@ -15,6 +18,25 @@ export interface SiteData {
   projects: MediaProject[];
   packages: ServicePackage[];
   testimonials: Testimonial[];
+  // Only filled in for the owner; customer details never reach other browsers
+  bookings: BookingRequest[];
+}
+
+export function toBooking(row: BookingRow): BookingRequest {
+  return {
+    id: row.id,
+    clientName: row.clientName,
+    phone: row.phone,
+    email: row.email ?? "",
+    eventType: row.eventType as BookingRequest["eventType"],
+    eventDate: row.eventDate,
+    venue: row.venue,
+    cameraSetup: row.cameraSetup as BookingRequest["cameraSetup"],
+    liveStream: row.liveStream,
+    notes: row.notes ?? "",
+    status: row.status,
+    createdAt: row.createdAt.toISOString().split("T")[0],
+  };
 }
 
 function timeAgo(date: Date): string {
@@ -33,9 +55,10 @@ function timeAgo(date: Date): string {
 }
 
 // Loads the content shown across the site. Visitors only get Live projects;
-// signed-in admins also get drafts and hidden items.
-export async function getSiteData(includeUnpublished: boolean): Promise<SiteData> {
-  const [settingsRow, projectRows, packageRows, testimonialRows] = await Promise.all([
+// signed-in admins also get drafts and hidden items, and the owner gets bookings.
+export async function getSiteData(role: UserRole | null): Promise<SiteData> {
+  const includeUnpublished = role !== null;
+  const [settingsRow, projectRows, packageRows, testimonialRows, bookingRows] = await Promise.all([
     prisma.siteSettings.findUnique({ where: { id: "default" } }),
     prisma.mediaProject.findMany({
       where: includeUnpublished ? undefined : { status: "Live" },
@@ -43,6 +66,9 @@ export async function getSiteData(includeUnpublished: boolean): Promise<SiteData
     }),
     prisma.servicePackage.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.testimonial.findMany({ orderBy: { createdAt: "asc" } }),
+    role === "owner"
+      ? prisma.bookingRequest.findMany({ orderBy: { createdAt: "desc" } })
+      : Promise.resolve([]),
   ]);
 
   let settings = INITIAL_SITE_SETTINGS;
@@ -93,17 +119,18 @@ export async function getSiteData(includeUnpublished: boolean): Promise<SiteData
     avatarColor: t.avatarColor,
   }));
 
-  return { settings, projects, packages, testimonials };
+  return { settings, projects, packages, testimonials, bookings: bookingRows.map(toBooking) };
 }
 
 // Used only if the database cannot be reached, so the site still renders
-export function getFallbackSiteData(includeUnpublished: boolean): SiteData {
+export function getFallbackSiteData(role: UserRole | null): SiteData {
   return {
     settings: INITIAL_SITE_SETTINGS,
-    projects: includeUnpublished
+    projects: role !== null
       ? INITIAL_MEDIA_PROJECTS
       : INITIAL_MEDIA_PROJECTS.filter((p) => p.status === "Live"),
     packages: INITIAL_PACKAGES,
     testimonials: INITIAL_TESTIMONIALS,
+    bookings: [],
   };
 }

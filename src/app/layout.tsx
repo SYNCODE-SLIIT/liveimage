@@ -42,13 +42,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getServerSession(authOptions);
-  const includeUnpublished = !!session;
+  const role = session?.user.role ?? null;
   let siteData: SiteData;
   try {
-    siteData = await getSiteData(includeUnpublished);
+    siteData = await getSiteData(role);
   } catch (e) {
     console.error("Failed to load site data from the database", e);
-    siteData = getFallbackSiteData(includeUnpublished);
+    siteData = getFallbackSiteData(role);
   }
 
   return (
