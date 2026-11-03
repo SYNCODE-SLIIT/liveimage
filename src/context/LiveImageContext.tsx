@@ -30,8 +30,9 @@ interface LiveImageContextType {
   bulkMoveCategory: (ids: string[], category: MediaCategory) => void;
   bookings: BookingRequest[];
   addBooking: (
-    booking: Omit<BookingRequest, "id" | "status" | "createdAt">
-  ) => BookingRequest;
+    booking: Omit<BookingRequest, "id" | "status" | "createdAt">,
+    honeypot?: string
+  ) => Promise<BookingRequest>;
   updateBookingStatus: (id: string, status: BookingStatus) => void;
   deleteBooking: (id: string) => void;
   packages: ServicePackage[];
@@ -163,15 +164,26 @@ export function LiveImageProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const addBooking = (
-    bookingData: Omit<BookingRequest, "id" | "status" | "createdAt">
-  ): BookingRequest => {
-    const newBooking: BookingRequest = {
+  const addBooking = async (
+    bookingData: Omit<BookingRequest, "id" | "status" | "createdAt">,
+    honeypot?: string
+  ): Promise<BookingRequest> => {
+    const res = await fetch("/api/bookings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...bookingData, website: honeypot }),
+    });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(result.error || "Could not send your booking. Please try again.");
+    }
+    const newBooking: BookingRequest = result.booking ?? {
       ...bookingData,
       id: `bk-${Date.now()}`,
       status: "New",
       createdAt: new Date().toISOString().split("T")[0],
     };
+    // Admin pages still read local state until they move to the database
     setBookings((prev) => {
       const next = [newBooking, ...prev];
       try {

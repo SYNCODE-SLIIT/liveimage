@@ -197,6 +197,9 @@ export function ContactStudioDockSection({
     initialNote || NOTE_TEMPLATES[0].body
   );
   const [savedToast, setSavedToast] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [honeypot, setHoneypot] = useState("");
 
   const [mailSubject, setMailSubject] = useState(
     "4K Multi-Camera Production & Live Stream Inquiry"
@@ -248,8 +251,15 @@ export function ContactStudioDockSection({
   };
 
   const triggerSuccessToast = (msg: string) => {
+    setErrorToast(null);
     setSavedToast(msg);
     setTimeout(() => setSavedToast(null), 4500);
+  };
+
+  const triggerErrorToast = (msg: string) => {
+    setSavedToast(null);
+    setErrorToast(msg);
+    setTimeout(() => setErrorToast(null), 6000);
   };
 
   const handleCopyPhone = () => {
@@ -258,7 +268,16 @@ export function ContactStudioDockSection({
     setTimeout(() => setCopiedPhone(false), 2000);
   };
 
-  const handleSaveBookingFromApp = (sourceLabel: string, customNotes: string) => {
+  const handleSaveBookingFromApp = async (
+    sourceLabel: string,
+    customNotes: string
+  ) => {
+    if (isSubmitting) return;
+    if (clientName.trim().length < 2 || clientPhone.trim().length < 7) {
+      triggerErrorToast("Please enter your name and phone / WhatsApp number.");
+      return;
+    }
+
     const formattedDate = eventDate
       ? new Date(eventDate).toLocaleDateString("en-GB", {
           day: "2-digit",
@@ -267,21 +286,32 @@ export function ContactStudioDockSection({
         })
       : "TBD";
 
-    addBooking({
-      clientName: clientName.trim() || "Studio Client",
-      phone: clientPhone.trim() || settings.phone,
-      email: clientEmail.trim() || "client@liveimage.lk",
-      eventType,
-      eventDate: formattedDate,
-      venue: venue.trim() || "Colombo, Sri Lanka",
-      cameraSetup,
-      liveStream,
-      notes: `[${sourceLabel}] ${customNotes}`,
-    });
-
-    triggerSuccessToast(
-      `Inquiry saved. We will contact ${clientPhone.trim() || "you"} shortly.`
-    );
+    setIsSubmitting(true);
+    try {
+      await addBooking(
+        {
+          clientName: clientName.trim(),
+          phone: clientPhone.trim(),
+          email: clientEmail.trim(),
+          eventType,
+          eventDate: formattedDate,
+          venue: venue.trim() || "Colombo, Sri Lanka",
+          cameraSetup,
+          liveStream,
+          notes: `[${sourceLabel}] ${customNotes}`,
+        },
+        honeypot
+      );
+      triggerSuccessToast(
+        `Inquiry sent. We will contact ${clientPhone.trim()} shortly.`
+      );
+    } catch (e) {
+      triggerErrorToast(
+        e instanceof Error ? e.message : "Could not send your booking."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const estimatedLkr =
@@ -318,15 +348,32 @@ export function ContactStudioDockSection({
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{savedToast}</span>
             </div>
-            <Link
-              href="/admin/bookings"
-              className="text-xs font-heading font-semibold text-white underline shrink-0"
-            >
-              View Admin
-            </Link>
+          </motion.div>
+        )}
+        {errorToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            role="alert"
+            className="mb-4 mx-auto max-w-xl px-4 py-3 rounded-xl bg-rec/15 border border-rec/40 text-red-200 text-xs sm:text-sm font-medium backdrop-blur-md"
+          >
+            {errorToast}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Honeypot: hidden from people, bots tend to fill it in */}
+      <input
+        type="text"
+        name="website"
+        value={honeypot}
+        onChange={(e) => setHoneypot(e.target.value)}
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="absolute -left-[9999px] w-px h-px opacity-0"
+      />
 
       {/* Active macOS Window */}
       <motion.div
