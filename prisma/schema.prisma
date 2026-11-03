@@ -1,0 +1,155 @@
+// Prisma Schema for LIVE IMAGE (PVT) LTD — liveimage.lk
+// PostgreSQL (Supabase). Enum values and fields mirror src/data/seedData.ts
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum MediaType {
+  video
+  photos
+  both
+}
+
+enum MediaCategory {
+  Concerts
+  Weddings
+  Corporate
+  Sports
+  Other
+}
+
+enum PublishStatus {
+  Live
+  Draft
+  Hidden
+}
+
+enum BookingStatus {
+  New
+  Quoted
+  Confirmed
+  Completed
+}
+
+enum UserRole {
+  owner
+  staff
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      UserRole @default(staff)
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MediaProject {
+  id             String        @id @default(cuid())
+  title          String
+  category       MediaCategory
+  type           MediaType     @default(video)
+  eventDate      String
+  description    String
+  subtitle       String
+  thumbnailUrl   String
+  videoUrl       String?
+  duration       String?
+  photoCount     Int           @default(0)
+  photos         String[]
+  cameraCount    Int           @default(4)
+  featuredOnHome Boolean       @default(false)
+  autoCompress   Boolean       @default(true)
+  addWatermark   Boolean       @default(false)
+  status         PublishStatus @default(Live)
+  fileSizeMB     Float         @default(45.0)
+  viewsCount     Int           @default(0)
+  visualTheme    String        @default("stage-beams") // stage-beams | wedding-warm | corporate-blue | sports-green | studio-amber | perahara-gold | control-room
+  items          MediaItem[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model MediaItem {
+  id         String       @id @default(cuid())
+  projectId  String
+  project    MediaProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileUrl    String
+  fileType   String // image/jpeg, video/mp4, youtube
+  fileSizeMB Float
+  duration   String?
+  createdAt  DateTime     @default(now())
+}
+
+model BookingRequest {
+  id           String        @id @default(cuid())
+  clientName   String
+  phone        String
+  email        String?
+  eventType    String // Wedding | Concert | Corporate | Sports | Other
+  eventDate    String
+  venue        String
+  cameraSetup  String // 2 Cameras | 4 Cameras | 6+ Cameras | Not sure yet
+  liveStream   Boolean       @default(true)
+  notes        String?
+  status       BookingStatus @default(New)
+  quotedAmount String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model ServicePackage {
+  id          String   @id @default(cuid())
+  tierName    String // Essential | Professional | Broadcast
+  cameraCount String // 2 Cameras | 4 Cameras | 6–12 Cameras
+  subtitle    String
+  priceLKR    String // e.g. "LKR 85,000"
+  features    String[]
+  highlighted Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  updatedAt   DateTime @updatedAt
+}
+
+model Testimonial {
+  id          String   @id @default(cuid())
+  clientName  String
+  clientRole  String
+  quote       String
+  rating      Int      @default(5)
+  avatarColor String   @default("#E8332B")
+  createdAt   DateTime @default(now())
+}
+
+model SiteSettings {
+  id                  String   @id @default("default")
+  heroBadge           String   @default("MULTI-CAMERA PRODUCTION")
+  heroHeadline        String   @default("Every angle. Every moment. Live.")
+  heroSubheadline     String   @default("Concerts, weddings, corporate events and sports — filmed with up to 12 cameras in 4K and streamed in real time to audiences anywhere.")
+  heroVideoUrl        String   @default("https://www.youtube.com/embed/dQw4w9WgXcQ")
+  eventsFilmed        String   @default("850+")
+  cameraSetups        String   @default("12")
+  liveViewers         String   @default("1.2M")
+  yearsInProduction   String   @default("10 yrs")
+  showPackagePrices   Boolean  @default(false)
+  phone               String   @default("+94 77 037 7342")
+  whatsappNumber      String   @default("94770377342")
+  email               String   @default("hello@liveimage.lk")
+  address             String   @default("Dehiwala / Colombo, Sri Lanka")
+  facebookUrl         String   @default("https://facebook.com/LIVEIMAGE.lk")
+  facebookPersonalUrl String   @default("https://facebook.com/sadaruwanvideo")
+  youtubeUrl          String   @default("https://youtube.com/@liveimagelk")
+  instagramUrl        String   @default("https://instagram.com/liveimagelk")
+  tiktokUrl           String   @default("https://tiktok.com/@liveimagelk")
+  clientLogos         String[] @default([])
+  updatedAt           DateTime @updatedAt
+}

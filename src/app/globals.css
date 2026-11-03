@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-night: #0B0B0E;
+  --bg-stage: #1A1A21;
+  --accent-rec: #E8332B;
+  --accent-spotlight: #F2B544;
+  --text-paper: #F4F2EE;
+  --text-muted: #9CA3AF;
+  --admin-canvas: #F8F9FA;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #0B0B0E;
+  color: #F4F2EE;
+}
+
+body {
+  font-family: var(--font-inter), sans-serif;
+  background-color: #0B0B0E;
+  color: #F4F2EE;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-poppins), sans-serif;
+}
+
+/* Custom broadcast stage lighting effects */
+.stage-spotlight-bg {
+  background:
+    radial-gradient(ellipse 25% 75% at 22% 15%, rgba(124, 58, 237, 0.28) 0%, transparent 70%),
+    radial-gradient(ellipse 22% 80% at 50% 10%, rgba(59, 130, 246, 0.26) 0%, transparent 70%),
+    radial-gradient(ellipse 25% 75% at 78% 15%, rgba(232, 51, 43, 0.32) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(11, 11, 14, 0.55) 0%, rgba(11, 11, 14, 0.92) 75%, #0B0B0E 100%);
+}
+
+/* Custom scrollbar for dark broadcast theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0B0E;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #272732;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #E8332B;
+}
